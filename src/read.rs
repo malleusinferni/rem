@@ -44,14 +44,28 @@ pub fn to_string(input: &Program) -> Result<String> {
 
     let mut labels = HashMap::new();
 
-    let mut lines = Vec::<String>::new();
-
     for (label, block) in input.blocks.iter() {
         labels.insert(label, block.name.clone());
     }
 
+    let a = |atom| input.atoms.resolve(atom);
+
+    let l = |label| labels.get(&label)
+        .ok_or(Error::NoSuchLabel { label });
+
     for (_label, block) in input.blocks.iter() {
         buf.push_str(&format!("{}:\n", &block.name));
+
+        buf.push_str(&match block.kind {
+            Cc::Func { env_index, arg_count } => {
+                format!("func {}({}, {}):\n",
+                &block.name, env_index, arg_count)
+            },
+
+            _ => format!("label {}:\n", &block.name),
+        });
+
+        let mut lines = Vec::<String>::new();
 
         for op in block.body.iter() {
             lines.push(match op.clone() {
@@ -61,51 +75,40 @@ pub fn to_string(input: &Program) -> Result<String> {
 
         lines.push(match block.tail.clone() {
             Io::JUMP(label) => {
-                let label = labels.get(&label).unwrap();
-                format!("jump {}", label)
+                format!("jump {}", l(label)?)
             },
 
             Io::IF(bit, cons, alt) => {
-                let cons = labels.get(&cons).unwrap();
-                let alt = labels.get(&alt).unwrap();
-                format!("ifelse {}, {}, {}", bit, cons, alt)
+                format!("if {} then {} else {}", bit, l(cons)?, l(alt)?)
             },
 
             Io::TRACE(reg, label) => {
-                let label = labels.get(&label).unwrap();
-                format!("trace {}, {}", reg, label)
+                format!("trace {} then {}", reg, l(label)?)
             },
 
             Io::SAY(reg, label) => {
-                let label = labels.get(&label).unwrap();
-                format!("say {}, {}", reg, label)
+                format!("say {} then {}", reg, l(label)?)
             },
 
             Io::SEND(lhs, rhs, label) => {
-                let label = labels.get(&label).unwrap();
-                format!("send {}, {}, {}", lhs, rhs, label)
+                format!("send {}, {} then {}", lhs, rhs, l(label)?)
             },
 
             Io::ARM(id, env, next) => {
-                let id = input.atoms.resolve(id);
-                let next = labels.get(&next).unwrap();
-                format!("arm {}, {}, {}", id, env, next)
+                format!("arm {}({}) then {}", a(id), env, l(next)?)
             },
 
-            Io::SPAWN(label, env, ret, next) => {
-                let label = labels.get(&label).unwrap();
-                let next = labels.get(&next).unwrap();
-                format!("spawn {}, {}, {}, {}", label, env, ret, next)
+            Io::SPAWN(start, args, ret, next) => {
+                format!("let {} = spawn {}({}) then {}",
+                        ret, l(start)?, args, l(next)?)
             },
 
             Io::PUTENV(reg, id, next) => {
-                let next = labels.get(&next).unwrap();
-                format!("env[{}] = {} ~> {}", id, reg, next)
+                format!("let ENV[{}] = {} then {}", id, reg, l(next)?)
             },
 
             Io::RECUR(start, args) => {
-                let start = labels.get(&start).unwrap();
-                format!("recur {}, {}", start, args)
+                format!("recur {}({})", l(start)?, args)
             },
 
             Io::RETI(retry) => if retry {
