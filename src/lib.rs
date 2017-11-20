@@ -119,12 +119,12 @@ pub struct Block {
     pub tail: Io,
 }
 
-/// Represents a successfully decoded and successfully initialized program.
 pub struct Program {
     pub blocks: HashMap<Label, Block>,
     pub atoms: atom::Table,
 }
 
+/// Represents a successfully initialized program.
 pub struct RunningProgram {
     envs: Box<[List]>,
     program: Program,
@@ -143,33 +143,64 @@ pub enum Cc {
 }
 
 /// Encodes computational instructions that can be executed by a Cpu alone.
+///
+/// Instruction arguments are ordered "write first," eg. the MOV instruction
+/// reads its second argument and writes into the first. Arguments are also
+/// named according to their purpose, so they can be pattern matched in
+/// essentially any order.
 #[derive(Clone, Debug)]
 pub enum Op {
     NOP,
-    MOV(Reg, Rhs),
-    ADD(Reg, Rhs),
-    SUB(Reg, Rhs),
-    DIV(Reg, Rhs),
-    MUL(Reg, Rhs),
-    EQL(Bit, Reg, Rhs),
-    GT(Bit, Reg, Rhs),
-    LT(Bit, Reg, Rhs),
-    GTE(Bit, Reg, Rhs),
-    LTE(Bit, Reg, Rhs),
-    SET(Bit, bool),
-    CPY(Bit, Bit),
-    VPUSH(Rhs),
-    VCAT(Rhs),
-    VFIX(Reg),
-    STRCAT(Rhs),
-    STRFIX(Reg),
+
+    MOV { dst: Reg, src: Rhs, },
+    ADD { dst: Reg, src: Rhs, },
+    SUB { dst: Reg, src: Rhs, },
+    DIV { dst: Reg, src: Rhs, },
+    MUL { dst: Reg, src: Rhs, },
+
+    EQL { flag: Bit, lhs: Reg, rhs: Rhs, },
+    GT { flag: Bit, lhs: Reg, rhs: Rhs, },
+    LT { flag: Bit, lhs: Reg, rhs: Rhs, },
+    GTE { flag: Bit, lhs: Reg, rhs: Rhs, },
+    LTE { flag: Bit, lhs: Reg, rhs: Rhs, },
+
+    SET { dst: Bit, val: bool, },
+    CPY { dst: Bit, src: Bit, },
+
+    /// Append a single value to the value buffer.
+    VPUSH { src: Rhs, },
+
+    /// Append the contents of a list to the value buffer.
+    VCAT { src: Rhs, },
+
+    /// Capture the value buffer as a list and save it in a register.
+    VFIX { dst: Reg, },
+
+    // TODO: STRPUSH
+
+    /// Append the contents of a string to the string buffer.
+    STRCAT { src: Rhs, },
+
+    /// Capture the string buffer as a string and save it in a register.
+    STRFIX { dst: Reg, },
+
+    /// Append a wildcard to the pattern buffer.
     PATWILD,
-    PATVAL(Rhs),
-    PATFIX(u32),
-    PATPUSH(Label),
+
+    /// Append a single value to the pattern buffer.
+    PATVAL { src: Rhs, },
+
+    /// Turn the last `len` items in the pattern buffer into a list pattern.
+    PATFIX { len: u32, },
+
+    /// Move the contents of the pattern buffer to the trap buffer.
+    PATPUSH { start: Label, },
 }
 
 /// Encodes control flow and IO operations that require supervisor assistance.
+///
+/// Most variants specify a return address. Several also specify a register to
+/// write a return value into.
 #[derive(Clone, Debug)]
 pub enum Io {
     JUMP(Label),
@@ -759,7 +790,7 @@ fn hello_world() {
                 arg_count: 0,
             },
             body: vec!{
-                Op::MOV(Reg(2), Rhs::Str("Hello, world".into())),
+                Op::MOV { dst: Reg(2), src: Rhs::Str("Hello, world".into()), },
             },
             tail: Io::TRACE(Reg(2), Label(1)),
         },

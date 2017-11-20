@@ -59,116 +59,116 @@ impl Cpu {
         match op {
             Op::NOP => (),
 
-            Op::MOV(reg, rhs) => {
+            Op::MOV { dst, src } => {
+                let src = self.read(src)?;
+                self.write(dst, src)?;
+            },
+
+            Op::ADD { dst, src } => {
+                let src = self.read(src)?.as_int()?;
+                self.with_lhs(dst, |lhs| {
+                    Ok(lhs.as_int()?.wrapping_add(src))
+                })?;
+            },
+
+            Op::SUB { dst, src } => {
+                let src = self.read(src)?.as_int()?;
+                self.with_lhs(dst, |lhs| {
+                    Ok(lhs.as_int()?.wrapping_sub(src))
+                })?;
+            },
+
+            Op::DIV { dst, src } => {
+                let src = self.read(src)?.as_int()?;
+                if src == 0 { return Err(Error::DividedByZero); }
+                self.with_lhs(dst, |lhs| {
+                    Ok(lhs.as_int()? / src)
+                })?;
+            },
+
+            Op::MUL { dst, src } => {
+                let src = self.read(src)?.as_int()?;
+                self.with_lhs(dst, |lhs| {
+                    Ok(lhs.as_int()?.wrapping_mul(src))
+                })?;
+            },
+
+            Op::EQL { flag, lhs, rhs } => {
                 let rhs = self.read(rhs)?;
-                self.write(reg, rhs)?;
+                let lhs = self.read(lhs)?;
+                self.flags.write(flag, lhs == rhs);
             },
 
-            Op::ADD(reg, rhs) => {
+            Op::GTE { flag, lhs, rhs } => {
                 let rhs = self.read(rhs)?.as_int()?;
-                self.with_lhs(reg, |lhs| {
-                    Ok(lhs.as_int()?.wrapping_add(rhs))
-                })?;
+                let lhs = self.read(lhs)?.as_int()?;
+                self.flags.write(flag, lhs >= rhs);
             },
 
-            Op::SUB(reg, rhs) => {
+            Op::LTE { flag, lhs, rhs } => {
                 let rhs = self.read(rhs)?.as_int()?;
-                self.with_lhs(reg, |lhs| {
-                    Ok(lhs.as_int()?.wrapping_sub(rhs))
-                })?;
+                let lhs = self.read(lhs)?.as_int()?;
+                self.flags.write(flag, lhs <= rhs);
             },
 
-            Op::DIV(reg, rhs) => {
+            Op::GT { flag, lhs, rhs } => {
                 let rhs = self.read(rhs)?.as_int()?;
-                if rhs == 0 { return Err(Error::DividedByZero); }
-                self.with_lhs(reg, |lhs| {
-                    Ok(lhs.as_int()? / rhs)
-                })?;
+                let lhs = self.read(lhs)?.as_int()?;
+                self.flags.write(flag, lhs > rhs);
             },
 
-            Op::MUL(reg, rhs) => {
+            Op::LT { flag, lhs, rhs } => {
                 let rhs = self.read(rhs)?.as_int()?;
-                self.with_lhs(reg, |lhs| {
-                    Ok(lhs.as_int()?.wrapping_mul(rhs))
-                })?;
+                let lhs = self.read(lhs)?.as_int()?;
+                self.flags.write(flag, lhs < rhs);
             },
 
-            Op::EQL(bit, reg, rhs) => {
-                let rhs = self.read(rhs)?;
-                let lhs = self.read(reg)?;
-                self.flags.write(bit, lhs == rhs);
-            },
-
-            Op::GTE(bit, reg, rhs) => {
-                let rhs = self.read(rhs)?.as_int()?;
-                let lhs = self.read(reg)?.as_int()?;
-                self.flags.write(bit, lhs >= rhs);
-            },
-
-            Op::LTE(bit, reg, rhs) => {
-                let rhs = self.read(rhs)?.as_int()?;
-                let lhs = self.read(reg)?.as_int()?;
-                self.flags.write(bit, lhs <= rhs);
-            },
-
-            Op::GT(bit, reg, rhs) => {
-                let rhs = self.read(rhs)?.as_int()?;
-                let lhs = self.read(reg)?.as_int()?;
-                self.flags.write(bit, lhs > rhs);
-            },
-
-            Op::LT(bit, reg, rhs) => {
-                let rhs = self.read(rhs)?.as_int()?;
-                let lhs = self.read(reg)?.as_int()?;
-                self.flags.write(bit, lhs < rhs);
-            },
-
-            Op::CPY(bit, src) => {
+            Op::CPY { dst, src } => {
                 let b = self.flags.read(src);
-                self.flags.write(bit, b);
+                self.flags.write(dst, b);
             },
 
-            Op::SET(bit, b) => {
-                self.flags.write(bit, b);
+            Op::SET { dst, val } => {
+                self.flags.write(dst, val);
             },
 
-            Op::STRCAT(rhs) => {
-                let rhs = self.read(rhs)?.as_str()?;
-                self.str_buf.push_str(&rhs);
+            Op::STRCAT { src } => {
+                let string = self.read(src)?.as_str()?;
+                self.str_buf.push_str(&string);
             },
 
-            Op::STRFIX(reg) => {
-                let rhs = Value::from(self.str_buf.as_str());
+            Op::STRFIX { dst } => {
+                let src = Value::from(self.str_buf.as_str());
                 self.str_buf.clear();
-                self.write(reg, rhs)?;
+                self.write(dst, src)?;
             },
 
-            Op::VPUSH(rhs) => {
-                let rhs = self.read(rhs)?;
-                self.val_buf.push(rhs);
+            Op::VPUSH { src } => {
+                let elem = self.read(src)?;
+                self.val_buf.push(elem);
             },
 
-            Op::VCAT(rhs) => {
-                let rhs = self.read(rhs)?.as_list()?;
-                self.val_buf.extend(rhs.iter().cloned());
+            Op::VCAT { src } => {
+                let list = self.read(src)?.as_list()?;
+                self.val_buf.extend(list.iter().cloned());
             },
 
-            Op::VFIX(reg) => {
-                let rhs = List::from(self.val_buf.as_slice());
+            Op::VFIX { dst } => {
+                let list = List::from(self.val_buf.as_slice());
                 self.val_buf.clear();
-                self.write(reg, rhs)?;
+                self.write(dst, list)?;
             },
 
             Op::PATWILD => {
                 self.pat_buf.push(Pattern::Wildcard);
             },
 
-            Op::PATVAL(rhs) => {
-                let rhs = self.read(rhs)?;
-                self.pat_buf.push(Pattern::Value(rhs));
+            Op::PATVAL { src } => {
+                let pat = self.read(src)?;
+                self.pat_buf.push(Pattern::Value(pat));
             },
 
-            Op::PATFIX(len) => {
+            Op::PATFIX { len } => {
                 let start = self.pat_buf.len()
                     .checked_sub(len as usize)
                     .ok_or(Error::MalformedPattern)?;
@@ -177,7 +177,7 @@ impl Cpu {
                 self.pat_buf.push(Pattern::List(pat));
             },
 
-            Op::PATPUSH(label) => {
+            Op::PATPUSH { start } => {
                 let sender = self.pat_buf.pop()
                     .ok_or(Error::MalformedPattern)?;
                 let body = self.pat_buf.pop()
@@ -187,7 +187,7 @@ impl Cpu {
                     return Err(Error::MalformedPattern);
                 }
 
-                self.trap_buf.push(Handler(label, [body, sender]));
+                self.trap_buf.push(Handler(start, [body, sender]));
             },
         }
 
@@ -337,8 +337,8 @@ impl Cpu {
 #[test]
 fn simple_program() {
     let program = vec![
-        Op::MOV(Reg(0), Rhs::Int(2)),
-        Op::ADD(Reg(0), Rhs::Reg(Reg(0))),
+        Op::MOV { dst: Reg(0), src: Rhs::Int(2), },
+        Op::ADD { dst: Reg(0), src: Rhs::Reg(Reg(0)), },
     ];
 
     Cpu::run(program).expect(Reg(0), 4);
@@ -347,9 +347,9 @@ fn simple_program() {
 #[test]
 fn list_manip() {
     Cpu::run(vec!{
-        Op::VPUSH(Rhs::Str("Hello".into())),
-        Op::VPUSH(Rhs::Str("world".into())),
-        Op::VFIX(Reg(0)),
+        Op::VPUSH { src: Rhs::Str("Hello".into()) },
+        Op::VPUSH { src: Rhs::Str("world".into()) },
+        Op::VFIX { dst: Reg(0) },
     });
 }
 
@@ -359,7 +359,7 @@ fn pat_manip() {
         Op::PATWILD,
         Op::PATWILD,
         Op::PATWILD,
-        Op::PATFIX(2),
+        Op::PATFIX { len: 2 },
     }).pat_buf;
 
     let message: &[Value] = &[ 1.into(), vec![1i32, 2].into(), ];
